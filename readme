@@ -1,0 +1,7 @@
+CRUD API With Flask and PostgreSQL
+
+This API is based on the one made by esther vaati(essykings)
+
+In my version, I try to follow the principle of separation of concerns instead of using one file for the whole application
+
+Another addition is using flask-migrate to make it easier to update the database
