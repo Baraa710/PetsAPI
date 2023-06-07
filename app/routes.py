@@ -1,17 +1,21 @@
-
 from flask import jsonify, request, abort, redirect, url_for
-from app import app, db, bcrypt
+from app import app, db, bcrypt, login_manager
 from app.models import Pet, User
 from flask_cors import cross_origin
-from flask_login import login_user
+from flask_login import login_user, login_required, logout_user
 from sqlalchemy import or_
 
+@login_manager.user_loader
+def load_user(user_id):
+    '''takes in user id and returns the user from the database'''
+    return User.query.get(int(user_id))
 @app.route('/')
 def index():
     return jsonify({"message":"Welcome to my site"})
 
-@cross_origin()
+
 @app.route('/pets', methods=['POST'])
+@login_required
 def create_pet():
     """"""
     pet_data = request.json
@@ -27,8 +31,9 @@ def create_pet():
 
     return jsonify({"success":True, "response":"Pet "+pet_name+" added" })
 
-@cross_origin
+
 @app.route('/pets',methods=['GET'])
+@login_required
 def getpets():
     """Returns a json string containing all pets in the database"""
     all_pets = []
@@ -52,7 +57,7 @@ def getpets():
         }
     )
 
-@cross_origin
+@login_required
 @app.route("/pets/<int:pet_id>", methods = ["PATCH"])
 def update_pet(pet_id):
     """Takes pet id, update a pet age and/or description."""
@@ -71,7 +76,7 @@ def update_pet(pet_id):
         db.session.commit()
         return jsonify({"success": True, "response": "Pet Details updated"})
     
-@cross_origin
+@login_required
 @app.route("/pets/<int:pet_id>", methods = ["DELETE"])
 def delete_pet(pet_id):
     """given pet id, this function removes the pet from the database"""
@@ -86,10 +91,10 @@ def delete_pet(pet_id):
 
 
 
-@app.route('/login', methods = ['GET', 'POST'])
+@app.route('/login', methods = ['POST'])
 def login():
     '''
-    Parses login information from json request. Aceepts both username or password. Returns a Json response 
+    Parses login information from json request. Aceepts both username or email. Returns a Json response 
     with the logged in state (true or false) and reason for failed attempts
     ''' 
     json_request = request.json
@@ -97,9 +102,26 @@ def login():
     user = User.query.filter(or_(User.username == json_request.get('username'), User.email == json_request.get('email'))).first()
     
     if user:
-        if user.password==json_request['password']:
+        if bcrypt.check_password_hash(user.password, json_request.get('password') ):
             login_user(user)
             return jsonify({"Logged in": True})
         return jsonify({"Logged in": False, "response": "Invalid password"})
     return jsonify({"Logged in":False, "response":"Invalid username"})
-    
+
+@login_required
+@app.route('/logout', methods= ['GET', 'POST'])
+def logout():
+    '''Handles logging out and directs to login page'''
+    logout_user()
+    return jsonify({"Logged in":False}) 
+
+@app.route('/register', methods = ['POST'])
+def register():
+    json_request = request.json
+
+    hashed_password = bcrypt.generate_password_hash(json_request.get('password'))
+    hashed_password = hashed_password.decode("utf-8", "ignore")
+    new_user = User(username=json_request.get('username'), email = json_request.get('email'), password = hashed_password)
+    db.session.add(new_user)
+    db.session.commit()
+    return jsonify({"New User": True})
