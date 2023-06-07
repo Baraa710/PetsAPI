@@ -4,3 +4,5 @@
 __pycache__ 
 *.pyc
 app/__pycache__
+app/__pycache__/routes.cpython-311.pyc
+app/__pycache__/__init__.cpython-311.pyc
