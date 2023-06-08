@@ -1,6 +1,11 @@
 from app import db
 from flask_login import UserMixin
 from sqlalchemy.schema import Index, CheckConstraint
+from sqlalchemy.orm import validates
+from sqlalchemy.ext.declarative import declarative_base
+
+Base = declarative_base()
+
 class Pet(db.Model):
     __tablename__ = 'pets'
 
@@ -14,16 +19,30 @@ class Pet(db.Model):
         return "<Pet %r, age %d, type %r, >" %self.pet_name, self.pet_age, self.pet_type
 
 
-def string_column(name, min_length, max_length):
-    check_str = "LENGTH({}) < {}".format(name, max_length) + "LENGTH({}) > {}".format(name, min_length)
-    return db.Column(name, db.String(max_length), CheckConstraint(check_str), nullable = False)   
 
-class User(db.Model, UserMixin):
+class User(db.Model, UserMixin, Base):
     __tablename__='users'
     user_id = db.Column(db.Integer, primary_key=True)
-    username = string_column('username', 6, 20)
-    email = string_column('email',3,320)
-    password = string_column('password',6,300)
+    username = db.Column(db.String(20),unique = True, nullable = False)
+    email = db.Column(db.String(60),unique = True, nullable = False)
+    password =  db.Column(db.String(100),unique = True, nullable = False)
+    __table_args__ = (
+        CheckConstraint('char_length(username)> 5',
+                        name='some_string_min_length'),
+    )
+    @validates('username')
+    def validate_some_string(self, key, username) -> str:
+        if len(username) <= 5:
+            raise ValueError('username too short')
+        return username
+    @validates('email')
+    def validate_some_string(self, key, email) -> str:
+        if len(email) <= 2:
+            raise ValueError('email too short')
+        return email
+    
+    
+
     def get_id(self):
            return (self.user_id)
     def __repr__(self):

@@ -1,9 +1,9 @@
-from flask import jsonify, request, abort, redirect, url_for
+from flask import jsonify, request, abort, make_response, Response
 from app import app, db, bcrypt, login_manager
 from app.models import Pet, User
-from flask_cors import cross_origin
-from flask_login import login_user, login_required, logout_user
+from flask_login import login_user, login_required, logout_user, current_user
 from sqlalchemy import or_
+from app.auth import *
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -50,7 +50,7 @@ def getpets():
         all_pets.append(results)
     
     return jsonify(
-        {
+        {   "username" : current_user.username,
             "success":True,
             "pets":all_pets,
             "total_pets":len(pets),
@@ -98,22 +98,28 @@ def login():
     with the logged in state (true or false) and reason for failed attempts
     ''' 
     json_request = request.json
-    
-    user = User.query.filter(or_(User.username == json_request.get('username'), User.email == json_request.get('email'))).first()
+    username = json_request.get('username')
+    email = json_request.get('email')
+    password = json_request.get('password')
+    if not (email or username) or not password:
+        return jsonify({"Response": "Missing information"}), 400
+    user = User.query.filter(or_(User.username == username, User.email == email)).first()
     
     if user:
         if bcrypt.check_password_hash(user.password, json_request.get('password') ):
             login_user(user)
-            return jsonify({"Logged in": True})
-        return jsonify({"Logged in": False, "response": "Invalid password"})
-    return jsonify({"Logged in":False, "response":"Invalid username"})
+            return jsonify({"Logged in": True, "username" : current_user.username})
+        response = make_response("<h1>Failure</h1>")
+        response.status_code = 401
+        return jsonify({'logged in':False}), 401
+    return jsonify({'logged in':False}), 401
 
 @login_required
 @app.route('/logout', methods= ['GET', 'POST'])
 def logout():
     '''Handles logging out and directs to login page'''
     logout_user()
-    return jsonify({"Logged in":False}) 
+    return jsonify({"Logged in":False}) , 401
 
 @app.route('/register', methods = ['POST'])
 def register():
@@ -121,7 +127,26 @@ def register():
 
     hashed_password = bcrypt.generate_password_hash(json_request.get('password'))
     hashed_password = hashed_password.decode("utf-8", "ignore")
-    new_user = User(username=json_request.get('username'), email = json_request.get('email'), password = hashed_password)
+    username = json_request.get('username')
+    email = json_request.get('email')
+    if not email or not username or not hashed_password:
+        return jsonify({"Response": "Missing information"}), 400
+    if len(username)<5:
+        return jsonify({"Response":"Username is too short"}), 401
+    elif len(username)>20:
+        return jsonify({"Response":"Username is too long"}), 401
+    
+    if not is_valid_email_address(email):
+        return jsonify({"Response":"Invalid email address"}), 401
+
+
+    user = User.query.filter(User.email == email).first()
+    if user:
+        return jsonify({"Response":"email address already used"}), 401
+    user = User.query.filter(User.username == username).first()
+    if user:
+        return jsonify({"Response":"username already used"}), 401
+    new_user = User(username = username, email = email, password = hashed_password)
     db.session.add(new_user)
     db.session.commit()
     return jsonify({"New User": True})
