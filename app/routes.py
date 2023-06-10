@@ -4,6 +4,7 @@ from app.models import Pet, User
 from flask_login import login_user, login_required, logout_user, current_user
 from sqlalchemy import or_
 from app.auth import *
+import json
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -124,28 +125,52 @@ def logout():
 @app.route('/register', methods = ['POST'])
 def register():
     json_request = request.json
-
+    json_response={}
+    request_is_valid = True
+    password = json_request.get('password')
     hashed_password = bcrypt.generate_password_hash(json_request.get('password'))
     hashed_password = hashed_password.decode("utf-8", "ignore")
     username = json_request.get('username')
     email = json_request.get('email')
+    Response = ""
     if not email or not username or not hashed_password:
-        return jsonify({"Response": "Missing information"}), 400
+        json_response["Missing_Info"]= True
+        request_is_valid = False
+    
+    if len(password)<5:
+        json_response['password error'] = "password too short"
+        request_is_valid = False
+
+    if len(password)>20:
+        json_response['password error'] = "password too long"
+        request_is_valid = False
+
     if len(username)<5:
-        return jsonify({"Response":"Username is too short"}), 401
+        json_response['username_error']=("Username is too short")
+        request_is_valid = False
+
     elif len(username)>20:
-        return jsonify({"Response":"Username is too long"}), 401
+        json_response['username_error']=("Username is too long")
+        request_is_valid = False
     
     if not is_valid_email_address(email):
-        return jsonify({"Response":"Invalid email address"}), 401
+        json_response['email_error']=("Invalid email address")
+        request_is_valid = False
 
 
     user = User.query.filter(User.email == email).first()
     if user:
-        return jsonify({"Response":"email address already used"}), 401
+        json_response['email_error']="Email address is already used"
+        request_is_valid = False
     user = User.query.filter(User.username == username).first()
     if user:
-        return jsonify({"Response":"username already used"}), 401
+        json_response['username_error']="Username is already taken"
+        request_is_valid = False
+
+    
+    if not request_is_valid:
+        return jsonify(json_response), 401
+    
     new_user = User(username = username, email = email, password = hashed_password)
     db.session.add(new_user)
     db.session.commit()
